@@ -3,26 +3,23 @@
 
 > **Team Ctrl Freaks** · Domain: EdTech / Machine Learning · Doc Version 1.0
 
-Edu Growth is a proactive academic analytics platform. Instead of waiting for end-of-semester results, it continuously evaluates **10 data pillars** through **15 analytical engines**, predicts student risk early, finds the exact syllabus units where students struggle, and **automatically assigns a mentor for every unit based on how well each teacher actually performed in that unit**.
+Edu Growth analyzes a **99-column student performance dataset** covering six subjects, four practical labs, attendance, assignment behavior, extracurricular participation, and prior CGPA. It is designed to surface subject and unit-level patterns, estimate the final semester grade from historical examples, and identify unusual records for review. The current spreadsheet is a student-level snapshot; it does not contain teacher efficacy, risk labels, or assessment dates.
 
 ---
 
 ## 📑 Table of Contents
 1. [Problem Statement](#-problem-statement)
-2. [Our Solution](#-our-solution)
-3. [Overall System Flow](#-overall-system-flow)
-4. [⭐ Flagship Feature: Dynamic Unit-Wise Mentorship Engine](#-flagship-feature-dynamic-unit-wise-mentorship-engine)
-5. [Additional Features](#-additional-features)
-6. [The 10 Data Pillars](#-the-10-core-data-ingestion-pillars)
-7. [The 15 Analytical Engines](#-the-15-analytical-engines)
-8. [Machine Learning Models](#-machine-learning-models)
-9. [Database Design](#-database-design-postgresql)
-10. [API Overview](#-api-overview)
-11. [Tech Stack](#-tech-stack)
-12. [Installation & Setup (No Docker)](#-installation--setup-no-docker)
-13. [Project Structure](#-project-structure)
-14. [Team](#-team)
-15. [Roadmap](#-roadmap)
+2. [Solution](#-solution)
+3. [Dataset: 99 Columns](#-dataset-99-columns)
+4. [Analysis Workflow](#-analysis-workflow)
+5. [Model Plan](#-model-plan)
+6. [Database Design](#-database-design-postgresql)
+7. [API Overview](#-api-overview)
+8. [Tech Stack](#-tech-stack)
+9. [Setup](#-setup)
+10. [Project Structure](#-project-structure)
+11. [Team](#-team)
+12. [Roadmap](#-roadmap)
 
 ---
 
@@ -30,192 +27,67 @@ Edu Growth is a proactive academic analytics platform. Instead of waiting for en
 
 | Problem | What happens today |
 |---|---|
-| **Lagging feedback** | Risk is flagged only after midterms/finals, when it is too late to help. |
-| **Coarse evaluation** | A single subject score hides weak units. A student may ace Unit 1 and fail Unit 3. |
-| **Static mentorship** | One mentor for the whole semester, even if the mentor is weak in the topic the student needs help with. |
-| **Ignored behavioral signals** | Assignment delays, quiz speed, attendance dips and fatigue are never used in evaluation. |
+| **Coarse evaluation** | Overall grades can hide differences between subjects and the five unit scores recorded for each subject. |
+| **Disconnected signals** | Attendance, assessment marks, assignment delays, lab performance, and participation are often reviewed separately. |
+| **Late intervention** | A final grade alone does not show which currently available signals may warrant an earlier human review. |
+| **Unclear patterns** | Staff need a consistent way to compare students and subjects without treating a model score as a diagnosis. |
 
-## 💡 Our Solution
+## 💡 Solution
 
-- **Granular ingestion** – continuous monitoring of 10 data points (ST1, ST2, PUT, submissions, attendance, etc.).
-- **Unit-wise micro-analytics** – weaknesses mapped down to individual syllabus units.
-- **Dynamic mentor routing** – faculty and peer mentors reassigned per unit using teacher efficacy.
-- **Predictive ML** – XGBoost and regression models forecast scores and fire early warnings.
-- **Insights for both sides** – teachers see how their unit performed; students see where they stand and who will help them.
+- **One validated student profile** – ingest the spreadsheet and check required columns, types, duplicates, missing values, and plausible ranges.
+- **Subject and unit insights** – compare ST1, ST2, PUT, unit marks, assignments, quizzes, and attendance across the six subjects.
+- **Practical performance view** – compare execution and viva scores with submission delays across the four labs.
+- **Final-grade estimation** – train a supervised model using `final_semester_grade` as the target and only information available before that outcome.
+- **Exploratory student groups and outliers** – use PCA, clustering, and anomaly scores to support review, not to assign definitive risk labels.
+- **Human-reviewed support** – show contributing signals and keep medical leave as sensitive context, never as a penalty or an automated decision.
 
----
-
-## 🗺 Overall System Flow
-
-```mermaid
-flowchart TD
-    A["📥 Data Ingestion<br/>10 Pillars: Attendance, CGPA, ST1, ST2, PUT,<br/>Assignments, Quiz, Practicals, Participation"] --> B["🧹 Feature Engineering<br/>Imputation, Scaling, Learning Velocity,<br/>Concept Retention Index"]
-    B --> C["⚙️ FastAPI ML Microservices"]
-
-    C --> C1["Risk Classifier<br/>XGBoost"]
-    C --> C2["Score Predictor<br/>Regression"]
-    C --> C3["Anomaly Detector<br/>Isolation Forest"]
-    C --> C4["Cohort Clustering<br/>K-Means"]
-    C --> C5["⭐ Dynamic Mentor Switcher<br/>Teacher Efficacy Score"]
-
-    C1 --> D[("🗄 PostgreSQL Database")]
-    C2 --> D
-    C3 --> D
-    C4 --> D
-    C5 --> D
-
-    D --> E["🖥 JavaFX Desktop App<br/>Teacher Analytics Portal"]
-    D --> F["🌐 Student Web Dashboard<br/>Personalized Learning Path"]
-    D --> G["🔔 Automated Nudges<br/>Early Alerts and PDF Reports"]
-```
-
----
-
-## ⭐ Flagship Feature: Dynamic Unit-Wise Mentorship Engine
-
-Traditional systems give a student one fixed mentor for the entire semester. Edu Growth **re-evaluates mentor mapping for every syllabus unit**, because a teacher who is excellent at Unit 1 may not be the best choice for Unit 3.
-
-### Mentor Assignment Flow
+## 🗺 Analysis Workflow
 
 ```mermaid
 flowchart TD
-    A["📊 Class marks for Unit<br/>ST1, ST2, PUT, quizzes, practicals"] --> B["📈 Class-level analysis<br/>average, median, spread, mastery %, attendance"]
-    B --> C["👩‍🏫 Teacher Efficacy Score<br/>calculated per teacher, per unit"]
-    B --> D{"Student unit score"}
-
-    D -->|"Above 70%"| S["🟢 Strong<br/>Eligible as Peer Mentor"]
-    D -->|"40% to 70%"| M["🟡 Average<br/>Monitor only"]
-    D -->|"Below 40% / bottom of class"| W["🔴 Bottomer<br/>Needs Mentor"]
-
-    C --> P1["Faculty Mentor Pool<br/>teachers with highest TES in this unit"]
-    S --> P2["Peer Mentor Pool<br/>top scorers in this unit"]
-
-    W --> X["🔗 Auto Matching<br/>Bottomer with best mentor of that unit"]
-    P1 --> X
-    P2 --> X
-
-    X --> Y{"Mentor capacity<br/>available?"}
-    Y -->|"Yes"| Z["✅ Allocation saved<br/>with reason"]
-    Y -->|"No"| X2["Pick next best mentor"]
-    X2 --> X
-
-    Z --> T["👩‍🏫 Teacher Dashboard<br/>unit efficacy, weak topics, mentee progress"]
-    Z --> U["🎒 Student Dashboard<br/>assigned mentor, reason, practice set"]
-    Z --> N["🔁 Re-run at the start of the next unit"]
+    A["Google Sheet / CSV<br/>99 student fields"] --> B["Schema validation<br/>IDs, types, ranges, missingness"]
+    B --> C["EDA and preprocessing<br/>encode categories, impute, scale"]
+    C --> D["Subject and unit analysis"]
+    C --> E["PCA feature transformation"]
+    E --> F["Grade regression<br/>target: final_semester_grade"]
+    E --> G["Exploratory clustering<br/>K-Means"]
+    E --> H["Outlier review<br/>Isolation Forest"]
+    D --> I["Reviewed analytics and reports"]
+    F --> I
+    G --> I
+    H --> I
 ```
 
-### Example Scenario
+## 📋 Dataset: 99 Columns
 
-```mermaid
-flowchart LR
-    TA["Teacher A<br/>teaches Unit 1 well"] --> R1["Class A: high ST1 average"]
-    R1 --> H["High TES for Unit 1"]
+**Source:** [Edu Growth student dataset (Google Sheets)](https://docs.google.com/spreadsheets/d/18E6kDb3bGOOatyn9IRaZRoQnjmRVLRNUnkMCi7aCUPo/edit?usp=sharing). Export a CSV copy to `data/raw/` before running analysis. The schema groups below add up to 99 columns.
 
-    TB["Teacher B<br/>Unit 1 class average is low"] --> R2["Class B: bottomers identified"]
+| Group | Count | Columns |
+|---|---:|---|
+| Student information and add-ons | 11 | `roll_no`, `full_name`, `class_section`, `overall_attendance_pct`, `theory_attendance_pct`, `practical_attendance_pct`, `previous_cgpa`, `medical_leave_days`, `society_participation_pc`, `sports_activity_level`, `final_semester_grade` |
+| Subject attendance | 6 | `coa_attendance_pct`, `maths4_attendance_pct`, `dstl_attendance_pct`, `ds_attendance_pct`, `python_attendance_pct`, `cyber_attendance_pct` |
+| Lab attendance | 4 | `lab_ds_attendance_pct`, `lab_python_attendance_pct`, `lab_coa_attendance_pct`, `lab_cyber_attendance_pct` |
+| COA assessments | 11 | `coa_st1_marks`, `coa_st2_marks`, `coa_put_marks`, `coa_unit_1_marks`–`coa_unit_5_marks`, `coa_assignment_score`, `coa_assignment_delay_hours`, `coa_quiz_score` |
+| Maths4 assessments | 11 | `maths4_st1_marks`, `maths4_st2_marks`, `maths4_put_marks`, `maths4_unit_1_marks`–`maths4_unit_5_marks`, `maths4_assignment_score`, `maths4_assignment_delay_hours`, `maths4_quiz_score` |
+| DSTL assessments | 11 | `dstl_st1_marks`, `dstl_st2_marks`, `dstl_put_marks`, `dstl_unit_1_marks`–`dstl_unit_5_marks`, `dstl_assignment_score`, `dstl_assignment_delay_hours`, `dstl_quiz_score` |
+| DS assessments | 11 | `ds_st1_marks`, `ds_st2_marks`, `ds_put_marks`, `ds_unit_1_marks`–`ds_unit_5_marks`, `ds_assignment_score`, `ds_assignment_delay_hours`, `ds_quiz_score` |
+| Python assessments | 11 | `python_st1_marks`, `python_st2_marks`, `python_put_marks`, `python_unit_1_marks`–`python_unit_5_marks`, `python_assignment_score`, `python_assignment_delay_hours`, `python_quiz_score` |
+| Cybersecurity assessments | 11 | `cyber_st1_marks`, `cyber_st2_marks`, `cyber_put_marks`, `cyber_unit_1_marks`–`cyber_unit_5_marks`, `cyber_assignment_score`, `cyber_assignment_delay_hours`, `cyber_quiz_score` |
+| Lab performance | 12 | For each of `ds`, `python`, `coa`, and `cyber`: `lab_<subject>_execution_score`, `lab_<subject>_viva_score`, `lab_<subject>_submission_delay_hours` |
+| **Total** | **99** | Includes `final_semester_grade`, the supervised-learning target |
 
-    H --> MAP["Auto-assign Teacher A or a top Unit 1 student<br/>as mentor for Class B bottomers"]
-    R2 --> MAP
+The source sheet's actual value formats, score scales, missing-value conventions, and row count must be profiled during EDA. Do not infer scale limits or category encodings from the column names alone.
 
-    MAP --> U3["Unit 3 starts<br/>mapping recalculated"]
-    U3 --> NEW["Teacher B may now have the best TES<br/>and become mentor for Unit 3"]
-```
+## 📊 Analysis Capabilities
 
-### Teacher Efficacy Score (TES)
+- **Student and cohort summaries:** compare attendance, prior CGPA, marks, labs, and participation overall and by `class_section`.
+- **Subject and unit diagnostics:** compare ST1, ST2, PUT, unit marks, assignment scores/delays, and quiz scores for each subject.
+- **Lab diagnostics:** summarize execution, viva, attendance, and submission-delay measures for each lab.
+- **Grade prediction:** predict `final_semester_grade` from eligible pre-outcome fields; do not include identifiers or the target among predictors.
+- **Exploratory PCA and clustering:** reduce correlated numeric features and examine student groupings; clusters require interpretation and validation.
+- **Anomaly review:** use Isolation Forest to flag unusual feature combinations for a person to inspect. An anomaly score is not a validated risk label or diagnosis.
 
-TES is calculated separately for every teacher and every unit. It combines three things:
-
-| Component | What it measures | Default weight |
-|---|---|---|
-| **Class improvement** | How much the class average grew from ST1 to ST2 in that unit | 45% |
-| **Topic mastery** | Share of students scoring above 70% in that unit | 35% |
-| **Attendance retention** | How well the class kept attending during that unit's lectures | 20% |
-
-The weights are configurable and always add up to 100%. A higher TES means the teacher was more effective in that particular unit.
-
-### Mentor Allocation Rules
-1. A student qualifies for a mentor in a unit if they fall in the **bottomer bucket** for that unit.
-2. **Faculty mentor** is the teacher with the highest TES in that unit.
-3. **Peer mentor** is a student with a high score in that unit, good attendance and good consistency.
-4. Each mentor has a **capacity limit** (for example, a maximum number of mentees) to avoid overload.
-5. Every allocation stores a human-readable **reason**, such as "Scored 32% in Unit 1; mentor has the highest efficacy in Unit 1".
-6. Allocation is **re-run at the start of each unit** and can be re-triggered after ST1 or ST2.
-
-### What Each User Sees
-
-**👩‍🏫 Teacher insights**
-- Unit-wise efficacy score and rank among all teachers
-- Class average, median, spread and mastery % per unit
-- Which topics need re-teaching (the *topic* is flagged, not the students)
-- List of bottom students and who they have been mapped to
-- Mentee progress after mentoring (recovery)
-
-**🎒 Student insights**
-- Personal unit-wise score vs. class average and percentile
-- Assigned mentor for each weak unit, with the reason
-- Personalized practice set and predicted final score
-- Recovery progress after mentoring sessions
-
----
-
-## ➕ Additional Features
-
-| Feature | Description |
-|---|---|
-| **Teacher Performance Dashboard** | Unit-wise efficacy leaderboard, trend across units, strengths and weaknesses of each teacher. |
-| **Mentor Effectiveness Tracking** | Measures score improvement of mentees after mentoring and feeds it back into teacher efficacy. |
-| **Peer Mentor Matching** | Top students of a unit become peer mentors for weak students, with workload limits. |
-| **Early Warning & Auto-Alerts** | Plain-English alerts to teachers when a student enters High-Risk or triggers an anomaly. |
-| **Adaptive Homework Generator** | Practice sets built only from the student's weakest units and micro-topics. |
-| **Root Cause Analysis** | Explains *why* a student is failing (for example, mostly missing assignments vs. poor tests). |
-| **Learning Velocity & Retention Index** | How quickly a student adapts to a new unit and how much they retain after weeks. |
-| **Anomaly / Wellbeing Detector** | Flags sudden drops (for example, 90% to 30% with absenteeism) for pastoral care, not punishment. |
-| **Cohort Clustering** | Groups students into High Achievers, Consistent Performers, Slumpers and Critical Need. |
-| **Attendance Impact Calculator** | Shows how many marks a student lost by missing specific lectures. |
-| **Progress Milestones & Badges** | Milestones for recovery, consistency and on-time submissions. |
-| **Parent Sync / PDF Reports** | Auto-generated progress reports and notifications for parents. |
-| **Admin / Dean View** | Batch health, top 5% most vulnerable students, batch vs. historical norms. |
-| **What-If Simulator** *(planned)* | Shows predicted score if attendance or assignments improve. |
-| **Explainable AI (SHAP)** *(planned)* | Per-student explanation for every risk flag. |
-| **Role-Based Access** *(planned)* | Separate views for Admin, Teacher, Mentor, Student and Parent. |
-
----
-
-## 📥 The 10 Core Data Ingestion Pillars
-
-| # | Pillar | What it captures |
-|---|---|---|
-| 1 | **Unit-Wise Marks (Units 1–5)** | Granular marks per syllabus unit for topic-level understanding. |
-| 2 | **Attendance & Regularity Rate** | Rolling 14-day and 30-day attendance metrics. |
-| 3 | **Cumulative CGPA Benchmark** | Historical baseline of academic capability. |
-| 4 | **Class Aggregates & Percentiles** | Batch mean, spread, median and individual relative rank. |
-| 5 | **Practical & Lab Execution** | Hands-on execution, viva ratings, lab report quality. |
-| 6 | **Assignment Submission Behavior** | Delay in hours vs. deadline, effort consistency, quality. |
-| 7 | **Quiz Performance & Time-on-Task** | Item-level accuracy, speed per question, immediate retention. |
-| 8 | **Classroom Activity & Engagement** | Participation, doubt-asking frequency, forum contributions. |
-| 9 | **Midterm & Internal Exams (ST1, ST2, PUT)** | Formal assessment milestones mapped to syllabus progress. |
-| 10 | **Recent Trend Delta** | Recent momentum: improving or slumping. |
-
----
-
-## ⚙️ The 15 Analytical Engines
-
-| # | Engine | Purpose |
-|---|---|---|
-| 01 | **Overall Performance Analysis** | Batch-level health: median, extremes and spread for leadership. |
-| 02 | **Student-Wise Deep Dive** | 360° academic profile of one student against their own baseline. |
-| 03 | **Subject & Topic-Wise Analysis** | Flags weak *topics* (not students) when most of the class fails a unit. |
-| 04 | **Attendance–Performance Correlation** | Marks lost due to specific absences. |
-| 05 | **Performance Trend Tracking** | Classifies trajectory: upward, stagnating or downward. |
-| 06 | **Risk Classification & Analysis** | Safe / Moderate / High-Risk triage with a daily top 5% list. |
-| 07 | **Learning Gap Detection** | Compares quiz (short-term) vs. internals (long-term) retention. |
-| 08 | **Consistency & Volatility Analysis** | Steady learner vs. last-minute crammer. |
-| 09 | **Improvement Rate (Recovery) Tracking** | Recovery after a failure or mentoring intervention. |
-| 10 | **Forward Performance Prediction** | Predicts final marks if current behavior continues. |
-| 11 | **Behavioral Outlier Detection** | Detects sudden uncharacteristic drops (possible personal crisis). |
-| 12 | **Early Warning & Automated Alerting** | Auto-drafts and routes alerts to teachers. |
-| 13 | **Root Cause (Factor Importance) Analysis** | Explains *why* a student is failing. |
-| 14 | **Personalized Mentorship Routing** ⭐ | Unit-wise dynamic mentor assignment using teacher efficacy. |
-| 15 | **Adaptive Assignment Suggestion Engine** | Personalized remediation practice sets. |
+This is a cross-sectional dataset unless additional dated snapshots are supplied. It cannot establish learning velocity, recovery after interventions, or sudden changes over time. It contains no teacher identifiers or teacher outcomes, so teacher-efficacy scoring and automatic faculty assignment are not supported. Peer-mentor suggestions would also need explicit eligibility, capacity, and safeguarding rules before implementation.
 
 ---
 
