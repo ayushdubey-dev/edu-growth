@@ -352,15 +352,64 @@ erDiagram
 
 ## 📁 Project Structure
 
-| Folder | Contents |
-|---|---|
-| `backend/` | FastAPI service: routers (students, units, mentorship, alerts, reports), services (efficacy calculator, mentor allocator), database layer |
-| `ml/` | Preprocessing (imputer, moving average, scaler), training scripts, exported models |
-| `database/` | PostgreSQL schema file |
-| `frontend-desktop/` | JavaFX teacher analytics portal |
-| `frontend-web/` | Student dashboard |
-| `docs/` | Architecture blueprint and proposal PDFs |
-| `README.md` | This file |
+```text
+data/
+├── raw/
+├── processed/
+└── pca_transformed/
+notebooks/
+├── 01_eda_data_cleaning.ipynb
+├── 02_pca_dimensionality_reduction.ipynb
+├── 03_cgpa_prediction_model.ipynb
+├── 04_mentor_clustering_model.ipynb
+└── 05_risk_isolation_forest.ipynb
+ml_pipeline/
+├── __init__.py
+├── config.py
+├── preprocessor.py
+├── pca_transformer.py
+├── trainer.py
+└── utils.py
+artifacts/
+app/
+├── __init__.py
+├── main.py
+├── api/
+│   ├── __init__.py
+│   └── v1/
+│       ├── __init__.py
+│       ├── router.py
+│       └── endpoints/
+│           ├── __init__.py
+│           ├── pca_analytics.py
+│           ├── mentor.py
+│           ├── cgpa.py
+│           ├── risk.py
+│           └── velocity.py
+├── core/
+│   ├── config.py
+│   ├── security.py
+│   └── database.py
+├── services/
+│   ├── __init__.py
+│   ├── pca_service.py
+│   ├── prediction_service.py
+│   └── mentor_service.py
+└── schemas/
+    ├── __init__.py
+    ├── student_schema.py
+    ├── pca_schema.py
+    └── response_schema.py
+frontend_javafx/
+tests/
+├── test_pca_pipeline.py
+└── test_endpoints.py
+requirements.txt
+.env.example
+README.md
+```
+
+The data and artifact directories start empty. Keep local datasets, trained model files, and `.env` secrets out of version control; `.env.example` is the safe configuration template.
 
 ---
 
