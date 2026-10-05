@@ -95,102 +95,66 @@ This is a cross-sectional dataset unless additional dated snapshots are supplied
 
 | Objective | Algorithm | Input Features | Output & Target Metrics |
 |---|---|---|---|
-| **At-Risk Student Classifier** | XGBoost + Logistic Regression | Attendance %, ST1/ST2 scores, assignment delays, recent delta, CGPA | Safe vs. At-Risk flag. Target AUC-ROC of 0.89 or more, recall of 0.92 or more |
-| **Expected Final Score Predictor** | Ridge Regression / Random Forest | Unit 1–5 marks, learning velocity, quiz speed, post-failure recovery | Predicted final grade %. Target error of 3.8% or less |
-| **Anomalous Behavior Detector** | Isolation Forest | Attendance-to-score ratio, sudden score drops above 35%, quiz-assignment gaps | Anomaly or normal flag |
-| **Student Cohort Clustering** | K-Means (4 clusters) | Score variance across units, submission delay hours, participation index | High Achievers, Consistent Performers, Slumpers, Critical Need |
+| **Final semester grade estimate** | Baseline classifier or regressor, selected after inspecting target values | Eligible attendance, prior CGPA, assessment, assignment, quiz, lab, and participation fields | Predicted `final_semester_grade`; report validation metrics appropriate to its actual type |
+| **Anomaly review** | Isolation Forest | Scaled numeric features selected for the use case | Anomaly score for human review; not a ground-truth risk class |
+| **Exploratory grouping** | PCA followed by K-Means | Scaled, leakage-checked academic features | Candidate clusters to interpret and validate; no fixed labels or cluster count assumed |
 
 ### Preprocessing & Feature Engineering
-1. **KNN Imputation** – fills missing assignment or quiz entries without distorting class distributions.
-2. **Exponential Moving Average** – captures academic momentum over the last 3 assessments.
-3. **Standard Scaling & Vectorization** – prepares features for ONNX serialization and FastAPI inference.
+1. Validate the 99-column schema, duplicate `roll_no` values, data types, score ranges, and missingness before imputation.
+2. Exclude `roll_no` and `full_name` from model features. Treat `class_section` as categorical and consider it when splitting evaluation data.
+3. Exclude `final_semester_grade` from predictors; use it only as the supervised target. Confirm every predictor is available before the grade is known to prevent leakage.
+4. Encode `sports_activity_level`, impute only after inspecting missingness, and scale numeric features for PCA and distance-based models.
+5. Keep `medical_leave_days` out of automated risk or anomaly scoring by default. If used for analysis, restrict access and interpret it as sensitive context, not a performance penalty.
+6. Use held-out validation and report measured results; no performance target is claimed until the dataset has been evaluated.
 
 ---
 
 ## 🗄 Database Design (PostgreSQL)
 
+The supplied CSV/Sheet is the source of truth. A database is optional for initial EDA; if PostgreSQL is added, retain the source fields in an import table and store generated outputs separately. The dataset contains no teacher records.
+
 ```mermaid
 erDiagram
-    STUDENTS ||--o{ UNIT_ASSESSMENT_SCORES : "has"
-    SYLLABUS_UNITS ||--o{ UNIT_ASSESSMENT_SCORES : "assessed in"
-    TEACHERS ||--o{ SYLLABUS_UNITS : "teaches"
-    TEACHERS ||--o{ TEACHER_UNIT_EFFICACY : "scored"
-    SYLLABUS_UNITS ||--o{ TEACHER_UNIT_EFFICACY : "for unit"
-    STUDENTS ||--o{ DYNAMIC_MENTORSHIP_ALLOCATIONS : "receives"
-    SYLLABUS_UNITS ||--o{ DYNAMIC_MENTORSHIP_ALLOCATIONS : "for unit"
+    DATASET_ROWS ||--o{ MODEL_OUTPUTS : "scored by"
 
-    STUDENTS {
-        int student_id PK
-        string roll_number
+    DATASET_ROWS {
+        int row_id PK
+        string roll_no
         string full_name
-        string email
-        decimal cgpa
+        string class_section
+        decimal previous_cgpa
+        string final_semester_grade
+        string remaining_source_fields
     }
-    TEACHERS {
-        int teacher_id PK
-        string full_name
-        string email
-        string department
-    }
-    SYLLABUS_UNITS {
-        int unit_id PK
-        string subject_code
-        int unit_number
-        string unit_title
-        int assigned_teacher_id FK
-    }
-    UNIT_ASSESSMENT_SCORES {
-        int score_id PK
-        int student_id FK
-        int unit_id FK
-        string assessment_type
-        decimal max_marks
-        decimal obtained_marks
-        int submission_delay_hours
-        date evaluated_at
-    }
-    TEACHER_UNIT_EFFICACY {
-        int tes_id PK
-        int teacher_id FK
-        int unit_id FK
-        decimal tes_value
-        decimal class_avg
-        decimal mastery_pct
-    }
-    DYNAMIC_MENTORSHIP_ALLOCATIONS {
-        int allocation_id PK
-        int student_id FK
-        int unit_id FK
-        string mentor_type
-        int assigned_mentor_id
-        string reason_flag
-        datetime assigned_at
+    MODEL_OUTPUTS {
+        int output_id PK
+        int row_id FK
+        string model_name
+        string model_version
+        string predicted_grade
+        decimal anomaly_score
+        int cluster_id
+        datetime created_at
     }
 ```
 
-**Table notes**
-- `unit_assessment_scores` – assessment type is one of ST1, ST2, PUT, QUIZ, PRACTICAL or ASSIGNMENT.
-- `dynamic_mentorship_allocations` – mentor type is FACULTY or PEER, and every row stores a reason.
-- `teachers` and `teacher_unit_efficacy` were added on top of the original blueprint so that teacher references are valid and efficacy history can be tracked.
+`remaining_source_fields` represents the other source columns, not one literal column. Restrict access to names, roll numbers, and medical leave data; do not expose them in model exports or general analytics.
 
 ---
 
 ## 🔌 API Overview
 
-> Planned REST endpoints (FastAPI). Final routes may change during development.
+> Proposed endpoints only; the current FastAPI files are scaffolds and these routes are not implemented yet.
 
 | Method | Endpoint | Description |
 |---|---|---|
-| `POST` | `/upload/marks` | Upload CSV of unit-wise marks and assessments |
-| `GET`  | `/students/{id}/profile` | Student deep-dive |
-| `GET`  | `/students/{id}/risk` | Risk class and root-cause factors |
-| `GET`  | `/students/{id}/prediction` | Predicted final score |
-| `GET`  | `/units/{unit_id}/analysis` | Topic-wise class analysis |
-| `POST` | `/mentorship/run/{unit_id}` | Compute efficacy and run dynamic mentor allocation |
-| `GET`  | `/mentorship/student/{id}` | Mentors assigned to a student |
-| `GET`  | `/teachers/{id}/efficacy` | Unit-wise efficacy and insights for a teacher |
-| `GET`  | `/alerts` | Early-warning alerts list |
-| `GET`  | `/reports/{student_id}/pdf` | Auto-generated PDF report |
+| `POST` | `/api/v1/datasets/import` | Validate and import the 99-column CSV |
+| `GET` | `/api/v1/students/{roll_no}` | Student profile with subject, unit, attendance, and lab summaries |
+| `GET` | `/api/v1/students/{roll_no}/grade-prediction` | Estimated `final_semester_grade` with model version |
+| `GET` | `/api/v1/students/{roll_no}/anomaly` | Exploratory anomaly score, not a risk label |
+| `GET` | `/api/v1/analytics/subjects/{subject_code}` | Aggregate subject and unit analysis |
+| `GET` | `/api/v1/analytics/pca` | Explained variance and component loadings |
+| `GET` | `/api/v1/analytics/cohorts` | Validated exploratory cluster summaries |
 
 ---
 
@@ -198,12 +162,11 @@ erDiagram
 
 | Layer | Technology |
 |---|---|
-| **Desktop Frontend** | Java (JavaFX / Swing) – teacher analytics portal |
-| **Student Dashboard** | Web dashboard (personalized learning path) |
-| **Backend API** | Python FastAPI (async REST) |
-| **Database** | PostgreSQL |
-| **ML** | scikit-learn, XGBoost, pandas, NumPy, ONNX Runtime |
-| **Deployment** | Runs directly on the machine or server using a Python virtual environment and Uvicorn (**no Docker**) |
+| **Data analysis** | Jupyter notebooks, pandas, NumPy |
+| **ML** | scikit-learn (preprocessing, PCA, regression/classification, K-Means, Isolation Forest) |
+| **Backend (planned)** | Python FastAPI and Uvicorn |
+| **Database (optional)** | PostgreSQL for imported rows and model outputs |
+| **Desktop UI (planned)** | JavaFX |
 
 ---
 
