@@ -12,7 +12,7 @@ Edu Growth analyzes a **99-column student performance dataset** covering six sub
 2. [Solution](#-solution)
 3. [Dataset: 99 Columns](#-dataset-99-columns)
 4. [Analysis Workflow](#-analysis-workflow)
-5. [Model Plan](#-model-plan)
+5. [Machine Learning Models](#-machine-learning-models)
 6. [Database Design](#-database-design-postgresql)
 7. [API Overview](#-api-overview)
 8. [Tech Stack](#-tech-stack)
@@ -49,7 +49,7 @@ flowchart TD
     B --> C["EDA and preprocessing<br/>encode categories, impute, scale"]
     C --> D["Subject and unit analysis"]
     C --> E["PCA feature transformation"]
-    E --> F["Grade regression<br/>target: final_semester_grade"]
+    E --> F["Grade model<br/>target: final_semester_grade"]
     E --> G["Exploratory clustering<br/>K-Means"]
     E --> H["Outlier review<br/>Isolation Forest"]
     D --> I["Reviewed analytics and reports"]
@@ -93,7 +93,7 @@ This is a cross-sectional dataset unless additional dated snapshots are supplied
 
 ## 🤖 Machine Learning Models
 
-| Objective | Algorithm | Input Features | Output & Target Metrics |
+| Objective | Algorithm | Input Features | Output / Evaluation |
 |---|---|---|---|
 | **Final semester grade estimate** | Baseline classifier or regressor, selected after inspecting target values | Eligible attendance, prior CGPA, assessment, assignment, quiz, lab, and participation fields | Predicted `final_semester_grade`; report validation metrics appropriate to its actual type |
 | **Anomaly review** | Isolation Forest | Scaled numeric features selected for the use case | Anomaly score for human review; not a ground-truth risk class |
@@ -124,7 +124,6 @@ erDiagram
         string class_section
         decimal previous_cgpa
         string final_semester_grade
-        string remaining_source_fields
     }
     MODEL_OUTPUTS {
         int output_id PK
@@ -138,7 +137,7 @@ erDiagram
     }
 ```
 
-`remaining_source_fields` represents the other source columns, not one literal column. Restrict access to names, roll numbers, and medical leave data; do not expose them in model exports or general analytics.
+The diagram shows representative fields only; the import table must retain all 99 source columns. Restrict access to names, roll numbers, and medical leave data; do not expose them in model exports or general analytics.
 
 ---
 
@@ -170,18 +169,15 @@ erDiagram
 
 ---
 
-## 🚀 Installation & Setup (No Docker)
+## 🚀 Setup
 
-**Prerequisites:** Python 3.10+, PostgreSQL 14+, JDK 17+ with Maven or Gradle, Node.js (for the web dashboard) and Git.
+The repository currently contains the project scaffold; the pipeline, API, and UI are not runnable implementations yet. To prepare the data for EDA:
 
-1. **Clone the repository** from GitHub and open the project folder.
-2. **Create the database** – create a PostgreSQL database named `edugrowth` and run the schema file from the `database` folder.
-3. **Backend** – inside the `backend` folder, create a Python virtual environment, activate it and install the packages listed in `requirements.txt`.
-4. **Configure environment** – create a `.env` file in `backend` with your PostgreSQL connection URL and the path of the ML models folder.
-5. **Start the API** – run the FastAPI app with Uvicorn on port 8000. Interactive API docs will be available at `http://localhost:8000/docs`.
-6. **ML models** – inside the `ml` folder, install its requirements and run the training scripts (risk classifier, score predictor, anomaly detector, clustering). Trained models are exported to `ml/models`.
-7. **Desktop app** – inside `frontend-desktop`, build and run the JavaFX app with Maven.
-8. **Student web dashboard** – inside `frontend-web`, install dependencies and start the dev server.
+1. Export the linked Google Sheet as CSV and place it in `data/raw/` (for example, `messy_edu_growth_99_columns.csv`).
+2. Create and activate a Python 3.10+ virtual environment.
+3. Install the dependencies selected for the implementation. `requirements.txt` is currently empty, so dependency installation instructions will be added with the working pipeline.
+4. Start with `notebooks/01_eda_data_cleaning.ipynb` and verify column names, target encoding, value ranges, duplicates, missingness, and whether one row represents one student.
+5. Keep the exported dataset and any `.env` secrets local; do not commit personal student data.
 
 ---
 
@@ -244,7 +240,7 @@ requirements.txt
 README.md
 ```
 
-The data and artifact directories start empty. Keep local datasets, trained model files, and `.env` secrets out of version control; `.env.example` is the safe configuration template.
+The data and artifact directories start empty. Keep local datasets, trained model files, and `.env` secrets out of version control; `.env.example` is the safe configuration template. The notebook filenames `03_cgpa_prediction_model.ipynb` and `05_risk_isolation_forest.ipynb` are inherited from the initial scaffold: the target is `final_semester_grade`, and anomaly scores are not risk labels.
 
 ---
 
@@ -262,22 +258,21 @@ The data and artifact directories start empty. Keep local datasets, trained mode
 | Vivek Soni | Backend | Shreya Singh |
 | Prashant Singh | Designing | — |
 
-**Module ownership:** Suhani & Pranav – preprocessing and feature engineering; ML team – risk classifier, score predictor, anomaly detection, clustering, mentor switcher; Raunak – JavaFX desktop client; Vivek – FastAPI and PostgreSQL; Prashant – UI/UX design.
+**Planned ownership:** Suhani & Pranav – data validation and preprocessing; ML team – final-grade modeling, PCA, clustering, and anomaly review; Raunak – JavaFX client; Vivek – FastAPI and optional PostgreSQL; Prashant – UI/UX design.
 
 ---
 
 ## 🛣 Roadmap
 
-- [x] System architecture and blueprint
-- [x] 10 data pillars and 15 engines defined
-- [x] Database design
-- [ ] Data ingestion (CSV upload) and preprocessing pipeline
-- [ ] Efficacy calculation and dynamic mentor allocation
-- [ ] ML model training and export
-- [ ] FastAPI endpoints
-- [ ] JavaFX teacher portal and student web dashboard
-- [ ] Alerts and PDF reports
-- [ ] SHAP explainability, What-If simulator, role-based access
+- [x] 99-column spreadsheet schema documented
+- [ ] Export the source sheet and profile its rows, types, categories, missing values, and score scales
+- [ ] Implement schema validation, cleaning, and privacy-aware preprocessing
+- [ ] Fit and evaluate PCA; choose component count from measured explained variance
+- [ ] Train and validate a model for `final_semester_grade` after confirming target format and avoiding leakage
+- [ ] Evaluate exploratory K-Means clusters and Isolation Forest anomaly scores with human review
+- [ ] Implement CSV import and dataset-backed FastAPI analytics
+- [ ] Build the JavaFX analytics client
+- [ ] Collect dated snapshots and teacher-linked data before adding velocity or teacher-efficacy features
 
 ---
 
